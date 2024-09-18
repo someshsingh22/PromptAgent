@@ -3,7 +3,6 @@ import os
 
 import requests
 
-
 class OpenAIModel:
     CLIENT_ID = os.getenv("CLIENT_ID")
     CLIENT_SECRET = os.getenv("CLIENT_SECRET")
@@ -19,13 +18,16 @@ class OpenAIModel:
         self.generate = self.gpt_chat_completion
 
     def refresh_token(self):
-        data = {
-            "grant_type": "authorization_code",
-            "client_id": self.CLIENT_ID,
-            "client_secret": self.CLIENT_SECRET,
-            "code": self.AUTHORIZATION_CODE,
+        data={
+                "grant_type": "authorization_code",
+                "client_id": self.CLIENT_ID,
+                "client_secret": self.CLIENT_SECRET,
+                "code": self.AUTHORIZATION_CODE,
         }
-        response = requests.post(self.AZURE_URL, data=data)
+        response = requests.post(
+            self.AZURE_URL,
+            data=data
+        )
         self.auth_token = json.loads(response.text)["access_token"]
 
     def gpt_chat_completion(self, prompt, max_tokens=100):
@@ -46,10 +48,14 @@ class OpenAIModel:
             },
         }
         try:
-            response = requests.post(self.FIREFALL_URL, headers=headers, json=json_data)
+            response = requests.post(
+                self.FIREFALL_URL, headers=headers, json=json_data
+            )
         except:
             self.refresh_token()
-            response = requests.post(self.FIREFALL_URL, headers=headers, json=json_data)
+            response = requests.post(
+                self.FIREFALL_URL, headers=headers, json=json_data
+            )
         openai_response = json.loads(response.text)
         text = openai_response["generations"][0][0]["text"]
         return text
