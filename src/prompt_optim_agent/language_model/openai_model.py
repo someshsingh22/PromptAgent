@@ -1,57 +1,70 @@
-from openai import OpenAI
+import json
+import os
 import time
 
+import requests
 
-class OpenAIModel():
-    def __init__(
-        self,
-        model_name: str,
-        api_key: str,
-        temperature: float,
-        **kwargs):
-        
-        if api_key is None:
-            raise ValueError(f"api_key error: {api_key}")
-        try:
-            self.model = OpenAI(api_key=api_key)
-        except Exception as e:
-            print(f"Init openai client error: \n{e}")
-            raise RuntimeError("Failed to initialize OpenAI client") from e
-        
+
+class OpenAIModel:
+    CLIENT_ID = os.getenv("CLIENT_ID")
+    CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+    AUTHORIZATION_CODE = os.getenv("AUTHORIZATION_CODE")
+    AZURE_URL = os.getenv("AZURE_URL")
+
+    def __init__(self, model_name: str, temperature: float, **kwargs):
+
         self.model_name = model_name
         self.temperature = temperature
-        
+        self.refresh_token()
+
         self.batch_forward_func = self.batch_forward_chatcompletion
         self.generate = self.gpt_chat_completion
 
-        
-    
+    def refresh_token(self):
+        response = requests.post(
+            self.AZURE_URL,
+            data={
+                "grant_type": "authorization_code",
+                "client_id": self.CLIENT_ID,
+                "client_secret": self.CLIENT_SECRET,
+                "code": self.AUTHORIZATION_CODE,
+            },
+        )
+        self.auth_token = json.loads(response.text)["access_token"]
+
+    def gpt_chat_completion(self, prompt, max_tokens=100):
+        headers = {
+            "x-gw-ims-org-id": self.CLIENT_ID,
+            "x-api-key": self.CLIENT_ID,
+            "Authorization": f"Bearer {self.temp_auth_token}",
+            "Content-Type": "application/json",
+        }
+        json_data = {
+            "dialogue": {"question": prompt},
+            "llm_metadata": {
+                "model_name": self.model_name,
+                "temperature": self.temperature,
+                "max_tokens": max_tokens,
+                "n": 1,
+                "llm_type": "azure_chat_openai",
+            },
+        }
+        try:
+            response = requests.post(
+                os.getenv("AZURE_URL"), headers=headers, json=json_data
+            )
+        except:
+            self.refresh_token()
+            response = requests.post(
+                os.getenv("AZURE_URL"), headers=headers, json=json_data
+            )
+        openai_response = json.loads(response.text)
+        text = openai_response["generations"][0][0]["text"]
+        return text
+
     def batch_forward_chatcompletion(self, batch_prompts):
-        """
-        Input a batch of prompts to openai chat API and retrieve the answers.
-        """
         responses = []
         for prompt in batch_prompts:
             response = self.gpt_chat_completion(prompt=prompt)
             responses.append(response)
         return responses
-    
-    
-    def gpt_chat_completion(self, prompt):
-        messages = [{"role": "user", "content": prompt},]
-        backoff_time = 1
-        while True:
-            try:
-                return self.model.chat.completions.create(
-                    messages=messages,
-                    model=self.model_name,
-                    temperature=self.temperature).choices[0].message.content.strip()
-            except Exception as e:
-                print(e, f' Sleeping {backoff_time} seconds...')
-                time.sleep(backoff_time)
-                backoff_time *= 1.5
-
-        
-    
-        
-        
